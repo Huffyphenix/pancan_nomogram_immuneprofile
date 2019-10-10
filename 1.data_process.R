@@ -53,3 +53,11 @@ clinical_2018cell %>%
   dplyr::rename("cancer_types"="type") %>%
   dplyr::inner_join(clinical_TCGA,by="cancer_types") %>%
   dplyr::rename("OS_stage"="clinical_data")-> clinical
+
+# combine data
+clinical %>%
+  dplyr::inner_join(TIL, by = "cancer_types") %>%
+  dplyr::inner_join(genelist_exp, by="cancer_types") -> combined_clinical_TIL_exp_data
+
+combined_clinical_TIL_exp_data %>%
+  readr::write_rds(file.path(data_path,"TCGA_combined_clinical_TIL_exp_data.rds.gz"))
