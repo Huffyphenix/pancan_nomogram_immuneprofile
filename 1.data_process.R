@@ -35,9 +35,7 @@ genelist_exp <- readr::read_rds(file.path(TCGA_path,"pancan33_expr.rds.gz")) %>%
   dplyr::select(-expr) 
 
 # TIL data
-TIL <- readr::read_rds(file.path(TIL_path,"pancan33_immune_infiltration_by_TCAP.rds.gz")) %>%
-  dplyr::ungroup() %>%
-  dplyr::select(-names)
+TIL <- readr::read_rds(file.path(TIL_path,"pancan33_immune_infiltration_by_TCAP.rds.gz")) 
 
 # clinical data
 clinical_2018cell <- readr::read_rds(file.path("/home/huff/project/data/TCGA-survival-time/cell.2018.survival","TCGA_pancan_cancer_cell_survival_time.rds.gz"))
