@@ -64,7 +64,7 @@ combined_clinical_TIL_exp_data %>%
   })) %>%
   dplyr::select(-data) %>%
   dplyr::inner_join(OS_uni_res.sig,by="cancer_types") %>%
-  dplyr::mutate(surv_res.multi = purrr::map2(combine_data.multi,filter_fig_features,fn_survival_test.multiCox)) %>%
+  dplyr::mutate(surv_res.multi = purrr::pmap(list(cancer_types,combine_data.multi,filter_fig_features),fn_survival_test.multiCox)) %>%
   dplyr::select(-combine_data.multi,-sig_features,-filter_fig_features) %>%
   tidyr::unnest() %>%
   dplyr::mutate(Features = gsub("2_","_",Features)) -> OS_multi_res
