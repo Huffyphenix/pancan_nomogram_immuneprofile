@@ -41,6 +41,12 @@ TIL <- readr::read_rds(file.path(TIL_path,"pancan33_immune_infiltration_by_TCAP.
 clinical_2018cell <- readr::read_rds(file.path("/home/huff/project/data/TCGA-survival-time/cell.2018.survival","TCGA_pancan_cancer_cell_survival_time.rds.gz"))
 clinical_TCGA <- readr::read_rds(file.path("/home/huff/project/TCGA_survival/data","Pancan.Merge.clinical.rds.gz"))
 
+stage_class <- tibble::tibble(Stage=c("stage i","stage ia","stage ib","stage ic","stage ii","stage iia",
+                       "stage iib","stage iic","stage iii","stage iiia","stage iiib",
+                       "stage iiic","stage iv","stage iva","stage ivb","stage ivc","stage x" ),
+               Stage1 = c("stage i","stage i","stage i","stage i","stage ii","stage ii",
+                          "stage ii","stage ii","stage iii","stage iii","stage iii",
+                          "stage iii","stage iv","stage iv","stage iv","stage iv","stage x"))
 clinical_2018cell %>%
   dplyr::mutate(PFS = purrr::map(data,.f=function(.x){
     .x %>%
@@ -50,7 +56,13 @@ clinical_2018cell %>%
   dplyr::select(-data) %>%
   dplyr::rename("cancer_types"="type") %>%
   dplyr::inner_join(clinical_TCGA,by="cancer_types") %>%
-  dplyr::rename("OS_stage"="clinical_data")-> clinical
+  dplyr::mutate(OS_stage = purrr::map(clinical_data,.f=function(.x){
+    .x %>%
+      dplyr::inner_join(stage_class,by="Stage") %>%
+      dplyr::select(-Stage) %>%
+      dplyr::rename("Stage"="Stage1")
+  })) %>%
+  dplyr::select(-clinical_data)-> clinical
 
 # combine data
 clinical %>%
