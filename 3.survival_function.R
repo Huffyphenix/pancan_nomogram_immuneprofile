@@ -2,7 +2,22 @@ library(magrittr)
 library(survival)
 library(ggplot2)
 # function to do survival analysis ----------------------------------------
-
+my_theme <-   theme(
+  panel.background = element_rect(fill = "white",colour = "black"),
+  panel.grid.major=element_line(colour=NA),
+  axis.text.y = element_text(size = 10,colour = "black"),
+  axis.text.x = element_text(size = 10,colour = "black"),
+  # legend.position = "none",
+  legend.text = element_text(size = 10),
+  legend.title = element_text(size = 12),
+  legend.background = element_blank(),
+  legend.key = element_rect(fill = "white", colour = "black"),
+  plot.title = element_text(size = 20),
+  axis.text = element_text(colour = "black"),
+  strip.background = element_rect(fill = "white",colour = "black"),
+  strip.text = element_text(size = 10),
+  text = element_text(color = "black")
+)
 # data process
 fn_data_process <- function(PFS,OS_stage,Infiltration,exp_filter,type){
   Infiltration %>%
@@ -13,8 +28,11 @@ fn_data_process <- function(PFS,OS_stage,Infiltration,exp_filter,type){
     dplyr::ungroup() -> TIL_gather
   exp_filter %>%
     tidyr::gather(-symbol, -entrez_id, key="barcode", value="value") %>%
-    dplyr::filter(substr(barcode,14,14)==0) %>%
+    dplyr::filter(substr(barcode,14,15)=="01") %>%
     dplyr::mutate(barcode = substr(barcode,1,12)) %>%
+    dplyr::group_by(barcode,symbol) %>%
+    dplyr::mutate(value = max(value)) %>%
+    unique() %>%
     dplyr::select(-entrez_id) %>%
     dplyr::rename("features"="symbol") %>%
     dplyr::select(barcode,features,value) %>%
@@ -52,100 +70,69 @@ fn_data_process <- function(PFS,OS_stage,Infiltration,exp_filter,type){
       dplyr::rename("time"="OS","status"="Status") %>%
       dplyr::mutate(features = gsub("-",".",features)) %>%
       dplyr::mutate(time = as.numeric(time), status = as.numeric(status)) %>%
-      tidyr::nest(-features)
+      dplyr::filter(!is.na(group)) %>%
+      tidyr::nest(-features) 
   }else{
     .combine_data %>%
       dplyr::rename("time"="PFS.time","status"="PFS")%>%
-      dplyr::mutate(features = gsub("-",".",features)) %>%
+      dplyr::mutate(features = gsub("-",".",features)) %>% 
+      dplyr::filter(!is.na(group)) %>%
       tidyr::nest(-features)
   }
 }
 
-
-fn_data_process_for_multi <- function(PFS,OS_stage,Infiltration,exp_filter,type){
-  Infiltration %>%
-    tidyr::gather(-barcode, key="features", value="value") %>%
-    dplyr::select(barcode,features,value) %>%
-    dplyr::group_by(features) %>%
-    dplyr::mutate(group = ifelse(value > quantile(value,0.5,na.rm=T),"2_high","1_low")) %>%
-    dplyr::ungroup() -> TIL_gather
-  exp_filter %>%
-    tidyr::gather(-symbol, -entrez_id, key="barcode", value="value") %>%
-    dplyr::filter(substr(barcode,14,14)==0) %>%
-    dplyr::mutate(barcode = substr(barcode,1,12)) %>%
-    dplyr::select(-entrez_id) %>%
-    dplyr::rename("features"="symbol") %>%
-    dplyr::select(barcode,features,value) %>%
-    dplyr::group_by(features) %>%
-    dplyr::mutate(group = ifelse(value > quantile(value,0.5,na.rm=T),"2_high","1_low")) %>%
-    dplyr::ungroup()  -> exp_gather
-  OS_stage %>%
-    dplyr::select(barcode,Age,Stage) %>%
-    dplyr::mutate(Age=as.numeric(Age)) %>%
-    tidyr::gather(-barcode,key="features",value="value") %>%
-    tidyr::nest(-features) %>%
-    dplyr::mutate(group = purrr::map2(features,data,.f=function(.x,.y){
-      # print(.x)
-      if (.x=="Age") {
-        .y %>%
-          dplyr::mutate(value = as.numeric(value)) %>%
-          dplyr::mutate(group = ifelse(value > quantile(value,0.5,na.rm=T),"2_high","1_low")) %>%
-          dplyr::select(-value)
-      } else{
-        .y %>%
-          dplyr::mutate(group = value) %>%
-          dplyr::select(-value)
-      }
+fn_filter_TIL_marker <- function(sig_features,TIL_markers){
+  sig_features %>%
+    dplyr::filter(features %in% unique(TIL_markers$Cell_type)) %>%
+    .$features -> sig_cells
+  TIL_markers %>%
+    dplyr::filter(Cell_type %in% sig_cells) %>%
+    tidyr::nest(-Cell_type) %>%
+    dplyr::mutate(narrow_markers = purrr::map(data,.f=function(.x){
+      .x %>%
+        dplyr::filter(markers %in% sig_features$features)
     })) %>%
-    dplyr::select(-data) %>%
-    tidyr::unnest() -> .stage
-  TIL_gather %>%
-    rbind(exp_gather) %>%
-    dplyr::select(-value) %>%
-    rbind(.stage) %>%
-    dplyr::inner_join(OS_stage %>% dplyr::select(barcode,OS,Status),by="barcode") %>%
-    dplyr::inner_join(PFS, by="barcode") -> .combine_data
-  if (type == "OS") {
-    .combine_data %>%
-      dplyr::rename("time"="OS","status"="Status") %>%
-      dplyr::mutate(time = as.numeric(time), status = as.numeric(status)) %>%
-      tidyr::nest(-features)
-  }else{
-    .combine_data %>%
-      dplyr::rename("time"="PFS.time","status"="PFS")%>%
-      tidyr::nest(-features)
-  }
+    dplyr::select(Cell_type,narrow_markers) %>%
+    tidyr::unnest() -> markers_overlapped
+  sig_features %>%
+    dplyr::filter(!features %in% markers_overlapped$markers)
 }
 # 3.2.function to do cox survival analysis  ----
 # 3.2.1.univariable cox analysis ---------
-fn_survival_test <- function(data,feature){
-  print(feature)
-  .cox <- survival::coxph(survival::Surv(time, status) ~ group, data = data, na.action = na.exclude)
-  summary(.cox) -> .z
+fn_survival_test <- function(data,feature,cancer_types){
+  print(paste(feature,cancer_types,sep="-"))
+  if(length(unique(data$group))>=2 && nrow(data)>=10){
+    .cox <- survival::coxph(survival::Surv(time, status) ~ group, data = data, na.action = na.exclude)
+    summary(.cox) -> .z
+    
+    # KM pvalue
+    kmp <- 1 - pchisq(survival::survdiff(survival::Surv(time, status) ~ group, data = data, na.action = na.exclude)$chisq,df = length(levels(as.factor(data$group))) - 1)
+    
+    # mearge results
+    tibble::tibble(
+      group = rownames(.z$conf.int),
+      n = .z$n,
+      coef = .z$coefficients[,1],
+      hr = .z$conf.int[1],
+      hr_l = .z$conf.int[3],
+      hr_h = .z$conf.int[4],
+      coxp = .z$waldtest[3],
+      kmp = kmp) %>%
+      dplyr::mutate(status = ifelse(hr > 1, "High_risk", "Low_risk"))
+  }else{
+    tibble::tibble()
+  }
   
-  # KM pvalue
-  kmp <- 1 - pchisq(survival::survdiff(survival::Surv(time, status) ~ group, data = data, na.action = na.exclude)$chisq,df = length(levels(as.factor(data$group))) - 1)
-  
-  # mearge results
-  tibble::tibble(
-    group = rownames(.z$conf.int),
-    n = .z$n,
-    coef = .z$coefficients[,1],
-    hr = .z$conf.int[1],
-    hr_l = .z$conf.int[3],
-    hr_h = .z$conf.int[4],
-    coxp = .z$waldtest[3],
-    kmp = kmp) %>%
-    dplyr::mutate(status = ifelse(hr > 1, "High_risk", "Low_risk"))
   # multi-variable cox analysis
 }
 
 # 3.2.2.multi-variable cox analysis ---------
-fn_survival_test.multiCox <- function(data,uni_sig_feature){
+fn_survival_test.multiCox <- function(cancer_types,data,uni_sig_feature){
+  print(cancer_types)
   covariates <- uni_sig_feature$features %>% unique()
   if(length(covariates)>=1){
     multi_formulas <- as.formula(paste('Surv(time, status)~', paste(covariates,collapse = " + ")))
-    model <- coxph(multi_formulas, data = data)
+    model <- coxph(multi_formulas, data = data, na.action = na.exclude)
     model.s <- summary(model)
     
     # Extract data
