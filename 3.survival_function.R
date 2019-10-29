@@ -181,6 +181,11 @@ fn_cox_plot_1 <- function(data,filename,title,facet, dir,w=4,h=4){
 }
 
 fn_cox_plot_2 <- function(data,filename,title, dir,w=4,h=4){
+  data %>%
+    dplyr::arrange(hr) %>%
+    .$Features -> features_rank
+  data <- within(data,Features<- factor(Features,levels=features_rank))
+  with(data,levels(Features))
   data %>% 
     # dplyr::mutate(functionWithImmune=functionWithImmune) %>%
     # dplyr::mutate(cancer_types = reorder(cancer_types,hr,sort)) %>%
