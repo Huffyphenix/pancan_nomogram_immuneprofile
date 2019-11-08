@@ -22,6 +22,7 @@ my_theme <-   theme(
 fn_data_process <- function(PFS,OS_stage,Infiltration,exp_filter,type){
   Infiltration %>%
     tidyr::gather(-barcode, key="features", value="value") %>%
+    dplyr::filter(substr(barcode,14,15)=="01") %>%
     dplyr::select(barcode,features,value) %>%
     dplyr::group_by(features) %>%
     dplyr::mutate(group = ifelse(value > quantile(value,0.5,na.rm=T),"2_high","1_low")) %>%
