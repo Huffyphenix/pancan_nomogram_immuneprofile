@@ -35,7 +35,13 @@ genelist_exp <- readr::read_rds(file.path(TCGA_path,"pancan33_expr.rds.gz")) %>%
   dplyr::select(-expr) 
 
 # TIL data
-TIL <- readr::read_rds(file.path(TIL_path,"pancan33_immune_infiltration_by_TCAP.rds.gz")) 
+# TIL <- readr::read_rds(file.path(TIL_path,"pancan33_immune_infiltration_by_TCAP.rds.gz")) 
+TIL.new <- readr::read_rds(file.path(data_path,"pancan33_cancer_TIL-191108-liull.rds.gz")) %>%
+  dplyr::mutate(Infiltration = purrr::map(cancer_TIL, .f=function(.x){
+    .x %>%
+      dplyr::rename("barcode"="Sample_ID")
+  })) %>%
+  dplyr::select(-cancer_TIL)
 
 # clinical data
 clinical_2018cell <- readr::read_rds(file.path("/home/huff/project/data/TCGA-survival-time/cell.2018.survival","TCGA_pancan_cancer_cell_survival_time.rds.gz"))
@@ -66,7 +72,7 @@ clinical_2018cell %>%
 
 # combine data
 clinical %>%
-  dplyr::inner_join(TIL, by = "cancer_types") %>%
+  dplyr::inner_join(TIL.new, by = "cancer_types") %>%
   dplyr::inner_join(genelist_exp, by="cancer_types") -> combined_clinical_TIL_exp_data
 
 combined_clinical_TIL_exp_data %>%
