@@ -21,25 +21,25 @@ my_theme <-   theme(
 # data process
 fn_data_process <- function(PFS,OS_stage,Infiltration,exp_filter,type){
   Infiltration %>%
-    tibble::rowid_to_column(var = "rowid") %>%
-    tidyr::gather(-barcode,-rowid, key="features", value="value") %>%
-    dplyr::filter(substr(barcode,14,15)=="01") %>%
-    dplyr::mutate(barcode = substr(barcode,1,12)) %>%
-    dplyr::group_by(barcode,features) %>%
-    dplyr::filter(rowid == min(rowid)) %>%
-    dplyr::ungroup() %>%
+    # tibble::rowid_to_column(var = "rowid") %>%
+    tidyr::gather(-barcode,key="features", value="value") %>%
+    # dplyr::filter(substr(barcode,14,15)=="01") %>%
+    # dplyr::mutate(barcode = substr(barcode,1,12)) %>%
+    # dplyr::group_by(barcode,features) %>%
+    # dplyr::filter(rowid == min(rowid)) %>%
+    # dplyr::ungroup() %>%
     dplyr::select(barcode,features,value) %>%
     dplyr::group_by(features) %>%
     dplyr::mutate(group = ifelse(value > quantile(value,0.5,na.rm=T),"2_high","1_low")) %>%
     dplyr::ungroup() -> TIL_gather
   exp_filter %>%
-    tidyr::gather(-symbol, -entrez_id, key="barcode", value="value") %>%
-    dplyr::filter(substr(barcode,14,15)=="01") %>%
-    dplyr::mutate(barcode = substr(barcode,1,12)) %>%
-    dplyr::group_by(barcode,symbol) %>%
-    dplyr::mutate(value = max(value)) %>%
-    unique() %>%
-    dplyr::select(-entrez_id) %>%
+    tidyr::gather(-symbol, key="barcode", value="value") %>%
+    # dplyr::filter(substr(barcode,14,15)=="01") %>%
+    # dplyr::mutate(barcode = substr(barcode,1,12)) %>%
+    # dplyr::group_by(barcode,symbol) %>%
+    # dplyr::mutate(value = max(value)) %>%
+    # unique() %>%
+    # dplyr::select(-entrez_id) %>%
     dplyr::rename("features"="symbol") %>%
     dplyr::select(barcode,features,value) %>%
     dplyr::group_by(features) %>%
