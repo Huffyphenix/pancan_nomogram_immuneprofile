@@ -75,5 +75,52 @@ clinical %>%
   dplyr::inner_join(TIL.new, by = "cancer_types") %>%
   dplyr::inner_join(genelist_exp, by="cancer_types") -> combined_clinical_TIL_exp_data
 
+fn_data_process_main <- function(cancer_types,PFS,OS_stage,Infiltration,exp_filter){
+  print(cancer_types)
+  Infiltration %>%
+    tibble::rowid_to_column(var = "rowid") %>%
+    tidyr::gather(-barcode,-rowid, key="features", value="value") %>%
+    dplyr::filter(substr(barcode,14,15)=="01") %>%
+    dplyr::mutate(barcode_1 = substr(barcode,1,12)) %>%
+    dplyr::group_by(barcode_1,features) %>%
+    dplyr::filter(rowid == min(rowid)) %>%
+    .$barcode %>%
+    unique() -> barcode_uniq
+  
+  exp_filter %>%
+    tidyr::gather(-symbol, -entrez_id, key="barcode", value="value") %>%
+    dplyr::filter(barcode %in% barcode_uniq) %>%
+    dplyr::mutate(barcode = substr(barcode,1,12)) %>%
+    dplyr::select(-entrez_id) %>%
+    dplyr::select(barcode,symbol,value) %>%
+    tidyr::spread(key="barcode", value="value")  %>%
+    dplyr::mutate(x="x") %>%
+    tidyr::nest(-x,.key="exp_filter") -> exp
+  Infiltration %>%
+    tidyr::gather(-barcode,key="features", value="value") %>%
+    dplyr::filter(barcode %in% barcode_uniq) %>%
+    dplyr::mutate(barcode = substr(barcode,1,12)) %>%
+    dplyr::select(barcode,features,value) %>%
+    tidyr::spread(key="features", value="value") %>%
+    dplyr::mutate(x="x") %>%
+    tidyr::nest(-x,.key="Infiltration")-> TIL
+  PFS %>%
+    dplyr::mutate(x="x") %>%
+    tidyr::nest(-x,.key="PFS")-> PFS
+  OS_stage %>%
+    dplyr::mutate(x="x") %>%
+    tidyr::nest(-x,.key="OS_stage")-> OS_stage
+  TIL %>%
+    dplyr::inner_join(exp,by="x") %>%
+    dplyr::inner_join(OS_stage,by="x") %>%
+    dplyr::inner_join(PFS,by="x") %>%
+    dplyr::select(-x)
+}
+
 combined_clinical_TIL_exp_data %>%
+  dplyr::mutate(combine_data = purrr::pmap(list(cancer_types,PFS,OS_stage,Infiltration,exp_filter),fn_data_process_main)) %>%
+  dplyr::select(cancer_types,combine_data) %>%
+  tidyr::unnest() -> combined_clinical_TIL_exp_data.new
+  
+combined_clinical_TIL_exp_data.new %>%
   readr::write_rds(file.path(data_path,"TCGA_combined_clinical_TIL_exp_data.rds.gz"))
