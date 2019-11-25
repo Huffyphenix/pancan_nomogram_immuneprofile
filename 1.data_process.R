@@ -1,7 +1,7 @@
 ####################################
 # data process for TCGA data
 # include TIL, expression data, and clinical data
-
+library(magrittr)
 
 # path --------------------------------------------------------------------
 
@@ -49,10 +49,10 @@ clinical_TCGA <- readr::read_rds(file.path("/home/huff/project/TCGA_survival/dat
 
 stage_class <- tibble::tibble(Stage=c("stage i","stage ia","stage ib","stage ic","stage ii","stage iia",
                        "stage iib","stage iic","stage iii","stage iiia","stage iiib",
-                       "stage iiic","stage iv","stage iva","stage ivb","stage ivc","stage x" ),
+                       "stage iiic","stage iv","stage iva","stage ivb","stage ivc","stage x","Not_applicable"),
                Stage1 = c("stage i","stage i","stage i","stage i","stage ii","stage ii",
                           "stage ii","stage ii","stage iii","stage iii","stage iii",
-                          "stage iii","stage iv","stage iv","stage iv","stage iv","stage x"))
+                          "stage iii","stage iv","stage iv","stage iv","stage iv","stage x","NA"))
 clinical_2018cell %>%
   dplyr::mutate(PFS = purrr::map(data,.f=function(.x){
     .x %>%
@@ -64,6 +64,7 @@ clinical_2018cell %>%
   dplyr::inner_join(clinical_TCGA,by="cancer_types") %>%
   dplyr::mutate(OS_stage = purrr::map(clinical_data,.f=function(.x){
     .x %>%
+      dplyr::mutate(Stage=ifelse(is.na(Stage),"Not_applicable",Stage)) %>%
       dplyr::inner_join(stage_class,by="Stage") %>%
       dplyr::select(-Stage) %>%
       dplyr::rename("Stage"="Stage1")
@@ -77,15 +78,27 @@ clinical %>%
 
 fn_data_process_main <- function(cancer_types,PFS,OS_stage,Infiltration,exp_filter){
   print(cancer_types)
-  Infiltration %>%
-    tibble::rowid_to_column(var = "rowid") %>%
-    tidyr::gather(-barcode,-rowid, key="features", value="value") %>%
-    dplyr::filter(substr(barcode,14,15)=="01") %>%
-    dplyr::mutate(barcode_1 = substr(barcode,1,12)) %>%
-    dplyr::group_by(barcode_1,features) %>%
-    dplyr::filter(rowid == min(rowid)) %>%
-    .$barcode %>%
-    unique() -> barcode_uniq
+  if(cancer_types == "LAML"){
+    Infiltration %>%
+      tibble::rowid_to_column(var = "rowid") %>%
+      tidyr::gather(-barcode,-rowid, key="features", value="value") %>%
+      dplyr::filter(substr(barcode,14,15)=="03") %>%
+      dplyr::mutate(barcode_1 = substr(barcode,1,12)) %>%
+      dplyr::group_by(barcode_1,features) %>%
+      dplyr::filter(rowid == min(rowid)) %>%
+      .$barcode %>%
+      unique() -> barcode_uniq
+  }else{
+    Infiltration %>%
+      tibble::rowid_to_column(var = "rowid") %>%
+      tidyr::gather(-barcode,-rowid, key="features", value="value") %>%
+      dplyr::filter(substr(barcode,14,15)=="01") %>%
+      dplyr::mutate(barcode_1 = substr(barcode,1,12)) %>%
+      dplyr::group_by(barcode_1,features) %>%
+      dplyr::filter(rowid == min(rowid)) %>%
+      .$barcode %>%
+      unique() -> barcode_uniq
+  }
   
   exp_filter %>%
     tidyr::gather(-symbol, -entrez_id, key="barcode", value="value") %>%
@@ -103,7 +116,7 @@ fn_data_process_main <- function(cancer_types,PFS,OS_stage,Infiltration,exp_filt
     dplyr::select(barcode,features,value) %>%
     tidyr::spread(key="features", value="value") %>%
     dplyr::mutate(x="x") %>%
-    tidyr::nest(-x,.key="Infiltration")-> TIL
+      tidyr::nest(-x,.key="Infiltration")-> TIL
   PFS %>%
     dplyr::mutate(x="x") %>%
     tidyr::nest(-x,.key="PFS")-> PFS
